@@ -10,6 +10,7 @@ using PfBlog.Data;
 
 namespace PfBlog.Controllers
 {
+
     [Route("api/[controller]")]
     public class BlogController : Controller
     {
@@ -20,11 +21,20 @@ namespace PfBlog.Controllers
             _context = context;
         }
 
+
         [HttpPost]
         public IActionResult Search_Posts(string index)
         {
             ///对输入关键字格式进行 筛选
-            
+
+            //无关键字
+            var blog = Search_Blog(index);
+            var tag = Search_Tag(index);
+            if (blog == null && tag == null)
+            {
+                return new EmptyResult();
+            }
+
             //按照Blog->Tag ,Tag->Blog进行两次搜索
             var posts = GetWithBlog(index);
             var posts2 = GetWithTag(index);
@@ -37,12 +47,14 @@ namespace PfBlog.Controllers
         }
 
 
-#region 利用中间表检索
-   
+        #region 利用中间表检索
+
         /// Blog->Tag 记录到posts
         public List<Posts> GetWithBlog(string index)
         {
             var blog = Search_Blog(index);
+            var tag = Search_Tag(index);
+
             int count = 0;
             var posts = new List<Posts>
             {
@@ -66,7 +78,7 @@ namespace PfBlog.Controllers
                 foreach (BlogTag s in _context.BlogTags)
                 {
                     if (s.BlogId == posts[i].BlogId)
-                    {  
+                    {
 
                         foreach (Tag t in _context.Tags)
                         {
@@ -77,7 +89,7 @@ namespace PfBlog.Controllers
                             }
                         }
                     }
-                  
+
                 }
                 clear = true;
             }
@@ -92,9 +104,11 @@ namespace PfBlog.Controllers
             {
 
             };
-            var list = new List<int>();//记录对应的BlogId-对应为Tag检索到的Blog数量        
-            int count = 0;
+            var list = new List<int>();//记录对应的Blogid - 以免重复生成Blog 
+            var list2 = new List<int>();//记录对应的Blogid - 直到Blog 查询完所有的Tag 才生成新的Blog对象
+            int count = -1;
             bool spik = false;
+            bool clear = true;
 
             foreach (Tag t in tags)
             {
@@ -102,39 +116,56 @@ namespace PfBlog.Controllers
                 {
                     if (s.TagId == t.TagId)
                     {
-
-                        if (!list.Contains(s.BlogId))
+                        //查看 --Blog -> Tag中如果已经包含有此Tag->Blog的对象，跳过 
+                        var blog = Search_Blog(index);
+                        foreach (Blog a in blog)
                         {
-                            //查看 --Blog -> Tag中如果已经包含有此Tag->Blog的对象，跳过 
-                            var blog = Search_Blog(index);
-                            foreach(Blog a in blog)
+                            if (a.BlogId == s.BlogId)
                             {
-                                if(a.BlogId == s.BlogId)
+                                spik = true;
+                                break;
+                            }
+
+                        }
+                        if (spik) { break; }
+
+                        foreach (BlogTag g in _context.BlogTags)
+                        {
+                            if (g.BlogId == s.BlogId)
+                            {
+
+                                if (list.Contains(s.BlogId)) { break; }
+
+                                var Findtag = _context.Tags.Where(p => p.TagId == g.TagId).ToList();
+
+                                if (list2.Contains(s.BlogId))
                                 {
-                                    spik = true;
-                                    break;
+                                    posts[count].Tag.Add(Findtag[0].Text);
+                                }
+                                else
+                                {
+                                    count++;
+                                    list2.Add(s.BlogId);
+                                    posts.Add(new Posts(0, "empty", "empty", "empty", DateTime.Today, new List<string> { "empty" }));
+                                    var Findblog = _context.Blogs.Where(b => b.BlogId == s.BlogId).ToList();
+                                    posts[count].BlogId = s.BlogId;
+                                    posts[count].Author = Findblog[0].Author;
+                                    posts[count].Category = Findblog[0].Category;
+                                    posts[count].Title = Findblog[0].Title;
+                                    posts[count].Tag.Clear();
+                                    posts[count].Tag.Add(Findtag[0].Text);
+                                    posts[count].Time = Findblog[0].Time;
                                 }
 
                             }
-                            if(spik) { break ; }
 
-                            list.Add(s.BlogId);
-                            posts.Add(new Posts(0, "empty", "empty", "empty", DateTime.Today, new List<string> { "empty" }));
-                            var Findblog = _context.Blogs.Where(b => b.BlogId == s.BlogId).ToList();
-
-                            posts[count].BlogId = s.BlogId;
-                            posts[count].Author = Findblog[0].Author;
-                            posts[count].Category = Findblog[0].Category;
-                            posts[count].Title = Findblog[0].Title;
-                            posts[count].Tag.Clear(); //去除默认值
-                            posts[count].Tag.Add(t.Text);
-                            posts[count++].Time = Findblog[0].Time;
                         }
-                        else //多个Tag对应一个Blog的情况
-                        {
-                            int Findblog = posts.FindIndex(c => c.BlogId == s.BlogId);
-                            posts[Findblog].Tag.Add(t.Text);
-                        }
+                        list.Add(s.BlogId);
+                        //  else //多个Tag对应一个Blog的情况
+                        //   {
+                        //    int Findblog = posts.FindIndex(c => c.BlogId == s.BlogId);
+                        //    posts[Findblog].Tag.Add(t.Text);
+                        //  }
                     }
                     spik = false;
                 }
@@ -145,7 +176,7 @@ namespace PfBlog.Controllers
         }
         #endregion
 
-#region 关键字查询
+        #region 关键字查询
         /// Blog 查询方法     
         public IEnumerable<Blog> Search_Blog(string goal)
         {
@@ -169,7 +200,7 @@ namespace PfBlog.Controllers
                      .ToList();
         }
 
-#endregion
+        #endregion
 
     }
 }
