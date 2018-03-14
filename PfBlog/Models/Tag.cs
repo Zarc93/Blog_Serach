@@ -8,6 +8,7 @@ namespace PfBlog.Models
     {   
         public int TagId { get; set; }
 
+        [MaxLength(10, ErrorMessage = "标签不能超过20个字段！")]
         public string Text { get; set; }
 
         public ICollection<BlogTag> BlogTags { get; set; }
